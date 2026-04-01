@@ -1,0 +1,64 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/g-holali-david/api-gateway
+  pullPolicy: IfNotPresent
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: api.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+
+env:
+  - name: PORT
+    value: "8080"
+  - name: AUTH_SERVICE_URL
+    value: "http://auth-service:80"
+  - name: WORKER_SERVICE_URL
+    value: "http://worker-service:80"
+
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readiness:
+    path: /ready
+    initialDelaySeconds: 3
+    periodSeconds: 5
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+serviceMonitor:
+  enabled: true
+  path: /metrics
+  interval: 15s

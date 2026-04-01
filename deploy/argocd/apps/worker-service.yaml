@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: worker-service
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/g-holali-david/hdgavi-microservices-gitops.git
+    targetRevision: main
+    path: deploy/helm/worker-service
+    helm:
+      valueFiles:
+        - ../../gitops-config/apps/worker-service/values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: microservices
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

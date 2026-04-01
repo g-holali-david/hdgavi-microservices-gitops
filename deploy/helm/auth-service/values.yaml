@@ -1,0 +1,56 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/g-holali-david/auth-service
+  pullPolicy: IfNotPresent
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8081
+
+ingress:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 64Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+env:
+  - name: PORT
+    value: "8081"
+  - name: JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: auth-secrets
+        key: jwt-secret
+
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readiness:
+    path: /ready
+    initialDelaySeconds: 3
+    periodSeconds: 5
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+serviceMonitor:
+  enabled: true
+  path: /metrics
+  interval: 15s

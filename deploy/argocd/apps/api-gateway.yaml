@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: api-gateway
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/g-holali-david/hdgavi-microservices-gitops.git
+    targetRevision: main
+    path: deploy/helm/api-gateway
+    helm:
+      valueFiles:
+        - ../../gitops-config/apps/api-gateway/values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: microservices
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

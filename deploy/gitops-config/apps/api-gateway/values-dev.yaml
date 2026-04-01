@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image:
+  tag: "latest"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 64Mi
+
+autoscaling:
+  enabled: false
+
+ingress:
+  enabled: true
+  hosts:
+    - host: api.dev.local
+      paths:
+        - path: /
+          pathType: Prefix

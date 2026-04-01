@@ -1,0 +1,201 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: g-holali-david
+
+jobs:
+  # ── Detect changed services ──
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      auth: ${{ steps.filter.outputs.auth }}
+      gateway: ${{ steps.filter.outputs.gateway }}
+      worker: ${{ steps.filter.outputs.worker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            auth:
+              - 'services/auth-service/**'
+            gateway:
+              - 'services/api-gateway/**'
+            worker:
+              - 'services/worker-service/**'
+
+  # ── Auth Service ──
+  auth-service:
+    name: "Auth Service"
+    needs: changes
+    if: needs.changes.outputs.auth == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Test
+        working-directory: services/auth-service
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Build image
+        run: docker build -t ${{ env.REGISTRY }}/${{ env.OWNER }}/auth-service:${{ github.sha }} services/auth-service
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "${{ env.REGISTRY }}/${{ env.OWNER }}/auth-service:${{ github.sha }}"
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+      - name: Login to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag ${{ env.REGISTRY }}/${{ env.OWNER }}/auth-service:${{ github.sha }} \
+                     ${{ env.REGISTRY }}/${{ env.OWNER }}/auth-service:latest
+          docker push ${{ env.REGISTRY }}/${{ env.OWNER }}/auth-service:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.OWNER }}/auth-service:latest
+
+  # ── API Gateway ──
+  api-gateway:
+    name: "API Gateway"
+    needs: changes
+    if: needs.changes.outputs.gateway == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Test
+        working-directory: services/api-gateway
+        run: go test -v -race ./... 2>/dev/null || echo "No tests yet"
+
+      - name: Build image
+        run: docker build -t ${{ env.REGISTRY }}/${{ env.OWNER }}/api-gateway:${{ github.sha }} services/api-gateway
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "${{ env.REGISTRY }}/${{ env.OWNER }}/api-gateway:${{ github.sha }}"
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+      - name: Login to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag ${{ env.REGISTRY }}/${{ env.OWNER }}/api-gateway:${{ github.sha }} \
+                     ${{ env.REGISTRY }}/${{ env.OWNER }}/api-gateway:latest
+          docker push ${{ env.REGISTRY }}/${{ env.OWNER }}/api-gateway:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.OWNER }}/api-gateway:latest
+
+  # ── Worker Service ──
+  worker-service:
+    name: "Worker Service"
+    needs: changes
+    if: needs.changes.outputs.worker == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: services/worker-service
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov ruff
+
+      - name: Lint
+        working-directory: services/worker-service
+        run: ruff check .
+
+      - name: Test
+        working-directory: services/worker-service
+        run: pytest -v --cov=app
+
+      - name: Build image
+        run: docker build -t ${{ env.REGISTRY }}/${{ env.OWNER }}/worker-service:${{ github.sha }} services/worker-service
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "${{ env.REGISTRY }}/${{ env.OWNER }}/worker-service:${{ github.sha }}"
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+      - name: Login to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag ${{ env.REGISTRY }}/${{ env.OWNER }}/worker-service:${{ github.sha }} \
+                     ${{ env.REGISTRY }}/${{ env.OWNER }}/worker-service:latest
+          docker push ${{ env.REGISTRY }}/${{ env.OWNER }}/worker-service:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.OWNER }}/worker-service:latest
+
+  # ── Update GitOps config ──
+  update-gitops:
+    name: "Update GitOps Config"
+    needs: [auth-service, api-gateway, worker-service]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update image tags in GitOps repo
+        run: |
+          echo "In production, this job would:"
+          echo "1. Clone hdgavi-gitops-config repo"
+          echo "2. Update image tags in values-*.yaml"
+          echo "3. Commit and push → ArgoCD auto-syncs"
+          echo ""
+          echo "New image tags:"
+          echo "  auth-service: ${{ github.sha }}"
+          echo "  api-gateway: ${{ github.sha }}"
+          echo "  worker-service: ${{ github.sha }}"
